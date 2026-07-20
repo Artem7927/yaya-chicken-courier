@@ -140,6 +140,16 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
 .err.show{display:block}
 .toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);z-index:60;background:#2A261C;border:1px solid var(--border2);color:var(--text);padding:12px 18px;border-radius:12px;font-weight:800;font-size:14px;opacity:0;pointer-events:none;transition:.25s}
 .toast.show{opacity:1}
+.sheet{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);display:none;align-items:flex-end}
+.sheet.show{display:flex}
+.sheet .box{width:100%;max-width:480px;margin:0 auto;background:var(--panel);border-radius:22px 22px 0 0;padding:18px 16px calc(20px + env(safe-area-inset-bottom));border-top:1px solid var(--border2);animation:up .2s ease}
+@keyframes up{from{transform:translateY(30px)}to{transform:none}}
+.sheet .box h3{font-family:'Bebas Neue';font-size:21px;letter-spacing:.5px;text-align:center;margin-bottom:16px}
+.sheet a,.sheet button{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border-radius:14px;padding:16px;font-weight:900;font-size:16px;margin-bottom:10px;text-decoration:none}
+.sheet .callb{background:var(--gold);color:#161100}
+.sheet .wab{background:#25D366;color:#052b13}
+.sheet .cancelb{background:var(--panel2);border:1px solid var(--border2);color:var(--text2);margin-bottom:0}
+.sheet svg{width:20px;height:20px}
 
 .gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:26px;gap:14px}
 .gate img{width:120px;height:120px;border-radius:28px;object-fit:cover;margin-bottom:4px}
@@ -225,6 +235,14 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
   <button onclick="enter()">Продолжить</button>
 </div>
 <div class="toast" id="toast"></div>
+<div class="sheet" id="contactSheet" onclick="if(event.target===this)closeContact()">
+  <div class="box">
+    <h3>Связаться с клиентом</h3>
+    <a class="callb" id="cCall" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="#161100" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Позвонить</a>
+    <a class="wab" id="cWa" href="#" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="#052b13"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1-.4-.1-.9-.3-1.6-.6-2.8-1.2-4.6-4-4.7-4.2-.1-.2-1.1-1.5-1.1-2.8 0-1.3.7-2 .9-2.2.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 1.9c.1.2.1.3 0 .5l-.4.5c-.1.2-.3.3-.1.6.1.3.6 1 1.3 1.6.9.8 1.6 1 1.9 1.2.2.1.4.1.5-.1l.6-.8c.2-.2.4-.2.6-.1l1.8.9c.2.1.4.2.5.3.1.2.1.7-.1 1.2z"/></svg>WhatsApp</a>
+    <button class="cancelb" onclick="closeContact()">Отмена</button>
+  </div>
+</div>
 
 <script>
 const API='https://yaya-db-production.up.railway.app';
@@ -394,15 +412,26 @@ function newCard(o){
     ${foot}</div>`;
 }
 function workCard(o){
+  const contact = o.phone
+    ? `<button class="callcli" style="width:100%" onclick="contactClient('${o.phone}')"><svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Связаться с клиентом</button>`
+    : `<div style="text-align:center;color:var(--text2);font-size:12px;font-weight:700;padding:4px 0">Телефон клиента не указан</div>`;
   return `<div class="oc work">
     <div class="h"><span class="no">#${o.num}</span><span class="badge b-work">В работе</span>
       <div class="rt"><b>Доставка</b></div></div>
     ${routeBlock(o)}
-    <div class="work-foot">
-      ${o.phone?`<a class="callcli" href="tel:${o.phone}"><svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Позвонить</a>`:'<span></span>'}
-      <button class="deliver" onclick="setStatus(${o.id},'delivered')">Доставлен <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></button>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:13px">
+      ${contact}
+      <button class="deliver" style="width:100%" onclick="setStatus(${o.id},'delivered')">Заказ доставлен <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></button>
     </div></div>`;
 }
+function normPhone(p){ let d=(p||'').replace(/\D/g,''); if(d.length===11&&d[0]==='8')d='7'+d.slice(1); if(d.length===10)d='7'+d; return d; }
+function contactClient(phone){
+  const d=normPhone(phone);
+  document.getElementById('cCall').href='tel:+'+d;
+  document.getElementById('cWa').href='https://wa.me/'+d;
+  document.getElementById('contactSheet').classList.add('show');
+}
+function closeContact(){ document.getElementById('contactSheet').classList.remove('show'); }
 function histCard(o){
   return `<div class="oc" style="border-left:4px solid var(--muted)">
     <div class="h"><span class="no">#${o.num}</span><span class="badge" style="background:rgba(158,152,139,.16);color:var(--text2)">Доставлен</span>
@@ -466,40 +495,47 @@ async function geocode(addr){
   }catch(e){}
   return null;
 }
-/* ── Дорожный маршрут через OSRM (запасной вариант — прямая линия) ── */
-async function roadRoute(from,to){
+/* ── Единый маршрут по всем точкам (OSRM trip: оптимальный порядок объезда) ── */
+async function tripRoute(pts){
   try{
-    const u=`https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
-    const r=await fetchT(u,{},12000); const j=await r.json();
-    if(j&&j.routes&&j.routes[0]){ return {coords:j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),dist:j.routes[0].distance,dur:j.routes[0].duration}; }
+    const coordStr=pts.map(p=>p.lng+','+p.lat).join(';');
+    const u=`https://router.project-osrm.org/trip/v1/driving/${coordStr}?source=first&roundtrip=false&overview=full&geometries=geojson`;
+    const r=await fetchT(u,{},14000); const j=await r.json();
+    if(j&&j.code==='Ok'&&j.trips&&j.trips[0]){
+      return j.trips[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+    }
   }catch(e){}
-  return {coords:[[from.lat,from.lng],[to.lat,to.lng]],dist:null,dur:null};
+  return pts.map(p=>[p.lat,p.lng]);   // запасной вариант — прямые линии
 }
 
-let routesBusy=false;
-async function drawRoutes(){
-  if(!leaflet||!routeLayer||routesBusy)return; routesBusy=true;
-  routeLayer.clearLayers();
+let routesBusy=false, lastRouteSig='', boundsFitted=false;
+async function drawRoutes(force){
+  if(!leaflet||!routeLayer)return;
   const active=ORDERS.filter(o=>o.address && o.kst!=='cancel' && o.dst!=='delivered');
-  const bounds=[[REST.lat,REST.lng]]; if(lastPos)bounds.push([lastPos.lat,lastPos.lng]);
-  let any=false;
-  for(const o of active){
-    const dest=await geocode(o.address);
-    if(!dest)continue;
-    any=true;
-    const start = lastPos?{lat:lastPos.lat,lng:lastPos.lng}:{lat:REST.lat,lng:REST.lng};
-    const rt=await roadRoute(start,dest);
-    const cooking=(o.kst==='new'||o.kst==='cook');
-    const col=cooking?'#F58220':(o.dst==='on_way'?'#35C77E':'#F4B400');
-    L.polyline(rt.coords,{color:col,weight:5,opacity:.85,dashArray:cooking?'8 8':null}).addTo(routeLayer);
-    const dkm=rt.dist?(' · '+(rt.dist/1000).toFixed(1)+' км'):'';
-    L.marker([dest.lat,dest.lng],{icon:L.divIcon({className:'',html:`<div class="dmk">#${o.num}</div>`,iconSize:[34,20],iconAnchor:[17,20]})})
-      .addTo(routeLayer).bindPopup(`<b>Заказ #${o.num}</b><br>${o.address}${dkm}<br>${cooking?'Готовится ~'+fmtTime(readyAt(o)):(o.dst==='on_way'?'В пути':'Готов')}`);
-    bounds.push([dest.lat,dest.lng]);
-    await new Promise(r=>setTimeout(r,300));   // бережём публичные сервисы
+  const sig=active.map(o=>o.id+':'+o.kst+':'+o.dst+':'+o.address).join('|')+'|'+(lastPos?'p':'');
+  if(!force && sig===lastRouteSig) return;   // ничего не изменилось — не трогаем карту
+  if(routesBusy) return; routesBusy=true;
+  // геокодим адреса
+  const dests=[];
+  for(const o of active){ const d=await geocode(o.address); if(d)dests.push({o,d}); await new Promise(r=>setTimeout(r,250)); }
+  const start = lastPos?{lat:lastPos.lat,lng:lastPos.lng}:{lat:REST.lat,lng:REST.lng};
+  // строим слой в памяти, затем разом заменяем — без мигания
+  const grp=L.layerGroup();
+  const bounds=[[start.lat,start.lng]];
+  if(dests.length){
+    const line=await tripRoute([start].concat(dests.map(x=>x.d)));
+    L.polyline(line,{color:'#F4B400',weight:5,opacity:.9,lineJoin:'round'}).addTo(grp);
+    dests.forEach(x=>{
+      const cooking=(x.o.kst==='new'||x.o.kst==='cook');
+      L.marker([x.d.lat,x.d.lng],{icon:L.divIcon({className:'',html:`<div class="dmk" style="background:${cooking?'#F58220':'#F0453A'}">#${x.o.num}</div>`,iconSize:[40,20],iconAnchor:[20,20]})})
+        .addTo(grp).bindPopup(`<b>Заказ #${x.o.num}</b><br>${x.o.address}<br>${cooking?'Готовится ~'+fmtTime(readyAt(x.o)):'В пути'}`);
+      bounds.push([x.d.lat,x.d.lng]);
+    });
   }
-  if(any && bounds.length>1){ try{leaflet.fitBounds(L.latLngBounds(bounds).pad(0.25));}catch(e){} }
-  document.getElementById('mapHint').style.display=any?'none':'';
+  routeLayer.clearLayers(); grp.eachLayer(l=>routeLayer.addLayer(l));
+  lastRouteSig=sig;
+  if(!boundsFitted && dests.length){ try{leaflet.fitBounds(L.latLngBounds(bounds).pad(0.25));boundsFitted=true;}catch(e){} }
+  const hint=document.getElementById('mapHint'); if(hint)hint.style.display=dests.length?'none':'';
   routesBusy=false;
 }
 
