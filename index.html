@@ -108,6 +108,7 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
 .cmk{width:40px;height:40px;border-radius:50%;border:3px solid var(--gold);overflow:hidden;box-shadow:0 3px 12px rgba(0,0,0,.5)}
 .cmk img{width:100%;height:100%;object-fit:cover}
 .rmk{width:30px;height:30px;border-radius:9px;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font:900 9px Nunito;color:#3a2b00;background:var(--gold)}
+.dmk{min-width:34px;height:20px;padding:0 6px;border-radius:10px;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font:900 11px Nunito;color:#fff;background:var(--red);box-shadow:0 2px 8px rgba(0,0,0,.5)}
 
 .inc-big{margin:16px;background:linear-gradient(150deg,rgba(53,199,126,.14),rgba(53,199,126,.03));border:1px solid rgba(53,199,126,.3);border-radius:18px;padding:20px;text-align:center}
 .inc-big .v{font-family:'Bebas Neue';font-size:44px;color:var(--green);letter-spacing:.5px;line-height:.9}
@@ -184,6 +185,7 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
     <div class="top"><div class="hi"><h1>Карта</h1></div>
       <div class="toggle"><div class="sw" id="onSw2" onclick="toggleOnline()"></div><span>Онлайн</span></div></div>
     <div id="courMap"></div>
+    <div id="mapHint" style="margin:0 16px;font-size:12px;color:var(--muted);font-weight:700;text-align:center">Здесь появятся маршруты до твоих заказов — включи «Онлайн» и получи заказ.</div>
   </section>
 
   <section class="screen" id="s-income">
@@ -229,9 +231,10 @@ const API='https://yaya-db-production.up.railway.app';
 const POS_KEY='yaya_courier_pos', COUR_KEY='yaya_order_couriers', LIST_KEY='yaya_couriers';
 const REST={lat:51.7294,lng:75.3220,addr:'ул. Абая, 49/5 · Экибастуз',name:'Ресторан YaYa Chicken'};
 const SEND_EVERY=15000;
+const PREP_MIN=25;   // ориентировочное время приготовления, мин
 
 let ME='',online=false,lastPos=null,watchId=null,sendTimer=null,pollTimer=null;
-let ORDERS=[],curTab='new',leaflet=null,selfMk=null,onlineSince=0;
+let ORDERS=[],curTab='new',leaflet=null,selfMk=null,onlineSince=0,routeLayer=null;
 
 function fetchT(u,o,ms){ms=ms||9000;const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
   return fetch(u,Object.assign({cache:'no-store',signal:c.signal},o)).finally(()=>clearTimeout(t));}
@@ -322,8 +325,9 @@ async function loadOrders(){
   try{const r=await fetchT(API+'/orders?limit=100');const j=await r.json();orders=j.orders||[];}catch(e){return;}
   try{const v=await get(COUR_KEY);if(v&&typeof v==='object')cour=v;}catch(e){}
   orders.forEach(o=>{const c=cour[o.id];if(c){o.courier=c.courier;o.delivery_status=c.delivery_status;}});
-  ORDERS=orders.filter(o=>o.courier===ME).map(o=>({...parse(o),dst:o.delivery_status||'assigned'}));
+  ORDERS=orders.filter(o=>o.courier===ME).map(o=>({...parse(o),dst:o.delivery_status||'assigned',kst:o.status||'new'}));
   renderStats(); renderList();
+  if(document.getElementById('s-map').classList.contains('active')) drawRoutes();
 }
 
 function renderStats(){
@@ -336,17 +340,18 @@ function renderStats(){
   let act=parseInt(localStorage.getItem(todayKey())||'0',10); if(onlineSince)act+=Date.now()-onlineSince;
   const h=Math.floor(act/3600000),m=Math.floor((act%3600000)/60000);
   document.getElementById('stTime').textContent=h>0?(h+'ч '+m+'м'):(m+'м');
-  document.getElementById('cNew').textContent=ORDERS.filter(o=>o.dst==='assigned'||o.dst==='pending').length;
+  document.getElementById('cNew').textContent=ORDERS.filter(o=>o.kst!=='cancel'&&o.dst!=='on_way'&&o.dst!=='delivered').length;
   document.getElementById('cWork').textContent=ORDERS.filter(o=>o.dst==='on_way').length;
 }
 
 function setTab(t){curTab=t;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.t===t));renderList();}
-function mapLink(addr){return 'https://maps.google.com/?q='+encodeURIComponent((addr||'')+', Экибастуз');}
+function mapLink(addr){return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination='+encodeURIComponent((addr||'')+', Экибастуз');}
+function readyAt(o){return (Number(o.ts)||Date.now())+PREP_MIN*60000;}
 
 function renderList(){
   const box=document.getElementById('list');
   let items=[];
-  if(curTab==='new')  items=ORDERS.filter(o=>o.dst==='assigned'||o.dst==='pending').sort((a,b)=>b.ts-a.ts);
+  if(curTab==='new')  items=ORDERS.filter(o=>o.kst!=='cancel'&&o.dst!=='on_way'&&o.dst!=='delivered').sort((a,b)=>a.ts-b.ts);
   if(curTab==='work') items=ORDERS.filter(o=>o.dst==='on_way').sort((a,b)=>b.ts-a.ts);
   if(curTab==='hist') items=ORDERS.filter(o=>o.dst==='delivered').sort((a,b)=>b.ts-a.ts);
   if(!items.length){
@@ -369,15 +374,24 @@ function routeBlock(o){
     </div></div>`;
 }
 function newCard(o){
+  const cooking = o.kst==='new' || o.kst==='cook';
+  const badge = cooking
+    ? `<span class="badge" style="background:rgba(245,130,32,.16);color:var(--orange)">Готовится</span>`
+    : `<span class="badge b-new">Готов к выдаче</span>`;
+  const rt = cooking
+    ? `<div class="rt"><b style="color:var(--orange)">~${fmtTime(readyAt(o))}</b>будет готов</div>`
+    : `<div class="rt"><b>${fmtTime(o.ts)}</b>заказ готов</div>`;
+  const foot = cooking
+    ? `<div class="foot"><div class="m"><div class="v">${o.total.toLocaleString('ru-RU')} ₸</div><div class="l">${o.pay||'к оплате'}</div></div>
+        <button class="accept" style="background:var(--panel2);border:1px solid var(--border2);color:var(--text2)" disabled>Ждём готовности</button></div>
+       <div style="font-size:12px;color:var(--text2);font-weight:700;margin-top:9px;text-align:center">Можно выезжать заранее — маршрут открывается кнопкой навигации или в разделе «Карта»</div>`
+    : `<div class="foot"><div class="m"><div class="v">${o.total.toLocaleString('ru-RU')} ₸</div><div class="l">${o.pay||'к оплате'}</div></div>
+        <button class="accept" onclick="setStatus(${o.id},'on_way')">Принять заказ <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button></div>`;
   return `<div class="oc new">
-    <div class="h"><span class="no">#${o.num}</span><span class="badge b-new">Новый</span>
-      <div class="rt"><b>${fmtTime(o.ts)}</b>время заказа</div></div>
+    <div class="h"><span class="no">#${o.num}</span>${badge}${rt}</div>
     ${routeBlock(o)}
     <div class="divi"></div>
-    <div class="foot">
-      <div class="m"><div class="v">${o.total.toLocaleString('ru-RU')} ₸</div><div class="l">${o.pay||'к оплате'}</div></div>
-      <button class="accept" onclick="setStatus(${o.id},'on_way')">Принять заказ <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
-    </div></div>`;
+    ${foot}</div>`;
 }
 function workCard(o){
   return `<div class="oc work">
@@ -423,18 +437,70 @@ function renderIncome(){
 function initMap(){
   if(typeof L==='undefined')return;
   if(!leaflet){
-    leaflet=L.map('courMap',{zoomControl:true,attributionControl:false}).setView([REST.lat,REST.lng],14);
+    leaflet=L.map('courMap',{zoomControl:true,attributionControl:false}).setView([REST.lat,REST.lng],13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(leaflet);
     L.marker([REST.lat,REST.lng],{icon:L.divIcon({className:'',html:'<div class="rmk">YaYa</div>',iconSize:[30,30],iconAnchor:[15,15]})}).addTo(leaflet).bindPopup('Ресторан YaYa Chicken');
+    routeLayer=L.layerGroup().addTo(leaflet);
   }
   setTimeout(()=>leaflet.invalidateSize(),150);
   updateSelf();
+  drawRoutes();
 }
 function updateSelf(){
   if(!leaflet||!lastPos)return;
   const ll=[lastPos.lat,lastPos.lng];
   if(selfMk)selfMk.setLatLng(ll);
   else selfMk=L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="cmk"><img src="avatar.png"></div>',iconSize:[40,40],iconAnchor:[20,20]})}).addTo(leaflet).bindPopup('Вы');
+}
+
+/* ── Геокодинг адреса (кэш в localStorage) ── */
+async function geocode(addr){
+  if(!addr) return null;
+  const key='yaya_geo_'+addr;
+  try{ const c=localStorage.getItem(key); if(c) return JSON.parse(c); }catch(e){}
+  try{
+    const q=encodeURIComponent(addr+', Экибастуз, Казахстан');
+    const r=await fetchT('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+q,{headers:{'Accept':'application/json'}},12000);
+    const j=await r.json();
+    if(j&&j[0]){ const p={lat:parseFloat(j[0].lat),lng:parseFloat(j[0].lon)}; try{localStorage.setItem(key,JSON.stringify(p));}catch(e){} return p; }
+  }catch(e){}
+  return null;
+}
+/* ── Дорожный маршрут через OSRM (запасной вариант — прямая линия) ── */
+async function roadRoute(from,to){
+  try{
+    const u=`https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
+    const r=await fetchT(u,{},12000); const j=await r.json();
+    if(j&&j.routes&&j.routes[0]){ return {coords:j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),dist:j.routes[0].distance,dur:j.routes[0].duration}; }
+  }catch(e){}
+  return {coords:[[from.lat,from.lng],[to.lat,to.lng]],dist:null,dur:null};
+}
+
+let routesBusy=false;
+async function drawRoutes(){
+  if(!leaflet||!routeLayer||routesBusy)return; routesBusy=true;
+  routeLayer.clearLayers();
+  const active=ORDERS.filter(o=>o.address && o.kst!=='cancel' && o.dst!=='delivered');
+  const bounds=[[REST.lat,REST.lng]]; if(lastPos)bounds.push([lastPos.lat,lastPos.lng]);
+  let any=false;
+  for(const o of active){
+    const dest=await geocode(o.address);
+    if(!dest)continue;
+    any=true;
+    const start = lastPos?{lat:lastPos.lat,lng:lastPos.lng}:{lat:REST.lat,lng:REST.lng};
+    const rt=await roadRoute(start,dest);
+    const cooking=(o.kst==='new'||o.kst==='cook');
+    const col=cooking?'#F58220':(o.dst==='on_way'?'#35C77E':'#F4B400');
+    L.polyline(rt.coords,{color:col,weight:5,opacity:.85,dashArray:cooking?'8 8':null}).addTo(routeLayer);
+    const dkm=rt.dist?(' · '+(rt.dist/1000).toFixed(1)+' км'):'';
+    L.marker([dest.lat,dest.lng],{icon:L.divIcon({className:'',html:`<div class="dmk">#${o.num}</div>`,iconSize:[34,20],iconAnchor:[17,20]})})
+      .addTo(routeLayer).bindPopup(`<b>Заказ #${o.num}</b><br>${o.address}${dkm}<br>${cooking?'Готовится ~'+fmtTime(readyAt(o)):(o.dst==='on_way'?'В пути':'Готов')}`);
+    bounds.push([dest.lat,dest.lng]);
+    await new Promise(r=>setTimeout(r,300));   // бережём публичные сервисы
+  }
+  if(any && bounds.length>1){ try{leaflet.fitBounds(L.latLngBounds(bounds).pad(0.25));}catch(e){} }
+  document.getElementById('mapHint').style.display=any?'none':'';
+  routesBusy=false;
 }
 
 fillNames();
