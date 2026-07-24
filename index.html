@@ -222,14 +222,6 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
       <div class="prow">Статус <span class="rt" id="pfStatus">Не на линии</span></div>
       <div class="prow">Доставок сегодня <span class="rt" id="pfCount">0</span></div>
       <div class="prow">Заработок сегодня <span class="rt" id="pfMoney">0 ₸</span></div>
-      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px;margin-top:4px">
-        <div style="font-size:13px;font-weight:800;margin-bottom:8px">Ключ доступа</div>
-        <div style="font-size:11.5px;color:var(--text2);font-weight:700;line-height:1.45;margin-bottom:9px">Курьерский ключ доступа — его выдаёт администратор. Вводится один раз, хранится только в этом телефоне.</div>
-        <div style="display:flex;gap:8px">
-          <input id="keyInput" type="password" placeholder="ключ" style="flex:1;min-width:0;background:var(--panel2);border:1px solid var(--border2);border-radius:11px;color:var(--text);padding:11px 12px;font:700 14px Nunito,sans-serif">
-          <button onclick="saveKey()" style="background:var(--gold);border:none;border-radius:11px;color:#161100;font:800 14px Nunito,sans-serif;padding:0 16px">ОК</button>
-        </div>
-      </div>
       <button class="logout" onclick="logout()">Сменить курьера / выйти</button>
     </div>
   </section>
@@ -268,9 +260,14 @@ let ME='',online=false,lastPos=null,watchId=null,sendTimer=null,pollTimer=null;
 let ORDERS=[],curTab='new',leaflet=null,selfMk=null,onlineSince=0,routeLayer=null;
 
 /* Ключ доступа к серверу. Хранится только в этом телефоне.
-   Нужен, если на сервере включён ADMIN_TOKEN — иначе он отвечает 401. */
-let KEY=''; try{ KEY=localStorage.getItem('yaya_key')||''; }catch(e){}
-function setKey(k){ KEY=(k||'').trim(); try{ KEY?localStorage.setItem('yaya_key',KEY):localStorage.removeItem('yaya_key'); }catch(e){} }
+   Нужен, если на сервере включён ADMIN_TOKEN — иначе он отвечает 401.
+   ВАЖНО: ключ держим ТОЛЬКО в памяти. Он не сохраняется на диск и не
+   переживает перезапуск приложения — поэтому при каждом запуске курьер
+   вводит ключ заново на экране входа. Так «вход по старому ключу» без
+   ввода пароля исключён. */
+let KEY='';
+try{ localStorage.removeItem('yaya_key'); }catch(e){}  // подчищаем ключ старых версий
+function setKey(k){ KEY=(k||'').trim(); }
 function fetchT(u,o,ms){ms=ms||9000;const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
   o=Object.assign({},o||{});
   if(String(u).indexOf(API)===0){
@@ -341,12 +338,6 @@ async function enter(){
   openApp();
 }
 function logout(){ setOnline(false); localStorage.removeItem('yaya_courier_me'); setKey(''); location.reload(); }
-function saveKey(){
-  const el=document.getElementById('keyInput');
-  setKey(el.value); el.value='';
-  toast(KEY?'Ключ сохранён':'Ключ удалён');
-  fillNames(); loadOrders();
-}
 function openApp(){
   document.getElementById('gate').style.display='none';
   document.getElementById('app').style.display='';
@@ -656,30 +647,18 @@ async function drawRoutes(force){
 }
 
 fillNames();
-/* Автовход: пускаем только если и имя, и сохранённый ключ ещё валидны.
-   Иначе — экран входа. Так приложение больше не открывается «по имени»
-   без действующего ключа. */
-(async function(){
+/* Вход всегда требует ключ. Имя запоминаем только чтобы подставить в
+   поле — но в приложение без свежего ввода ключа не пускаем. Никакого
+   автовхода по сохранённому ключу: гейт закрывается только после того,
+   как курьер сам нажал «Войти» и сервер подтвердил ключ. */
+(function(){
   const saved=localStorage.getItem('yaya_courier_me');
-  if(!saved) return;                    // не входил ещё — обычный экран входа
-  const role=await verifyKey(KEY);
-  if(role==='neterr'){
-    // Нет сети: не выкидываем, но и в приложение не пускаем вслепую —
-    // ключ уже проверялся при прошлом входе, доверяем ему до восстановления связи.
-    if(KEY){ ME=saved; openApp(); }
-    else showGateWith(saved);
-    return;
-  }
-  if(role===false || (!KEY && role!=='open')){ showGateWith(saved); return; }
-  ME=saved; openApp();
-})();
-function showGateWith(name){
-  // Возвращаем на экран входа, подставив имя, но требуя ключ заново.
-  const t=document.getElementById('typeName'); if(t&&name)t.value=name;
+  const t=document.getElementById('typeName');
+  if(saved && t) t.value=saved;         // подставили имя для удобства
+  // Ключ в поле НЕ подставляем — курьер вводит его заново каждый раз.
   document.getElementById('gate').style.display='';
   document.getElementById('app').style.display='none';
-  gateErr('Введи ключ доступа, чтобы продолжить.');
-}
+})();
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
 </script>
 </body>
