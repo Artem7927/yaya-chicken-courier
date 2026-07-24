@@ -222,6 +222,14 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
       <div class="prow">Статус <span class="rt" id="pfStatus">Не на линии</span></div>
       <div class="prow">Доставок сегодня <span class="rt" id="pfCount">0</span></div>
       <div class="prow">Заработок сегодня <span class="rt" id="pfMoney">0 ₸</span></div>
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px;margin-top:4px">
+        <div style="font-size:13px;font-weight:800;margin-bottom:8px">Ключ доступа</div>
+        <div style="font-size:11.5px;color:var(--text2);font-weight:700;line-height:1.45;margin-bottom:9px">Курьерский ключ доступа — его выдаёт администратор. Вводится один раз, хранится только в этом телефоне.</div>
+        <div style="display:flex;gap:8px">
+          <input id="keyInput" type="password" placeholder="ключ" style="flex:1;min-width:0;background:var(--panel2);border:1px solid var(--border2);border-radius:11px;color:var(--text);padding:11px 12px;font:700 14px Nunito,sans-serif">
+          <button onclick="saveKey()" style="background:var(--gold);border:none;border-radius:11px;color:#161100;font:800 14px Nunito,sans-serif;padding:0 16px">ОК</button>
+        </div>
+      </div>
       <button class="logout" onclick="logout()">Сменить курьера / выйти</button>
     </div>
   </section>
@@ -235,6 +243,7 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
   <p>Выбери своё имя, чтобы выйти на смену</p>
   <select id="pickName"><option value="">Загружаю список…</option></select>
   <input id="typeName" placeholder="…или впиши имя вручную">
+  <input id="gateKey" type="password" placeholder="Ключ доступа (если сервер просит)">
   <button onclick="enter()">Продолжить</button>
 </div>
 <div class="toast" id="toast"></div>
@@ -257,7 +266,18 @@ const PREP_MIN=25;   // ориентировочное время пригото
 let ME='',online=false,lastPos=null,watchId=null,sendTimer=null,pollTimer=null;
 let ORDERS=[],curTab='new',leaflet=null,selfMk=null,onlineSince=0,routeLayer=null;
 
+/* Ключ доступа к серверу. Хранится только в этом телефоне.
+   Нужен, если на сервере включён ADMIN_TOKEN — иначе он отвечает 401. */
+let KEY=''; try{ KEY=localStorage.getItem('yaya_key')||''; }catch(e){}
+function setKey(k){ KEY=(k||'').trim(); try{ KEY?localStorage.setItem('yaya_key',KEY):localStorage.removeItem('yaya_key'); }catch(e){} }
 function fetchT(u,o,ms){ms=ms||9000;const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
+  o=Object.assign({},o||{});
+  if(String(u).indexOf(API)===0){
+    const h=Object.assign({},o.headers||{});
+    if(KEY) h['X-Admin-Token']=KEY;
+    if(typeof ME!=='undefined'&&ME) h['X-Courier-Name']=encodeURIComponent(ME);
+    o.headers=h;
+  }
   return fetch(u,Object.assign({cache:'no-store',signal:c.signal},o)).finally(()=>clearTimeout(t));}
 async function get(k){const r=await fetchT(API+'/kv/'+k);if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();return j.value;}
 /* Имена сравниваем «мягко»: пробелы, регистр и ё/е не должны мешать */
@@ -286,11 +306,18 @@ async function fillNames(){
   document.getElementById('pickName').innerHTML='<option value="">— выбери имя —</option>'+list.map(n=>`<option>${n}</option>`).join('');
 }
 function enter(){
+  const gk=document.getElementById('gateKey'); if(gk&&gk.value.trim()) setKey(gk.value);
   const n=(document.getElementById('typeName').value.trim())||document.getElementById('pickName').value;
   if(!n){toast('Выбери или впиши имя');return;}
   ME=n; localStorage.setItem('yaya_courier_me',ME); openApp();
 }
 function logout(){ setOnline(false); localStorage.removeItem('yaya_courier_me'); location.reload(); }
+function saveKey(){
+  const el=document.getElementById('keyInput');
+  setKey(el.value); el.value='';
+  toast(KEY?'Ключ сохранён':'Ключ удалён');
+  fillNames(); loadOrders();
+}
 function openApp(){
   document.getElementById('gate').style.display='none';
   document.getElementById('app').style.display='';
@@ -363,8 +390,10 @@ async function loadOrders(){
     const v=await get(COUR_KEY); if(v&&typeof v==='object')cour=v;
   }catch(e){ errC=e.message||'нет связи'; }
 
-  if(errO){ showErr('Не получается загрузить заказы ('+errO+'). Проверь интернет — список обновится сам.'); return; }
-  if(errC){ showErr('Заказы получены, но список назначений недоступен ('+errC+').'); }
+  const auth=/401|403/.test(errO+' '+errC);
+  if(auth){ showErr('Сервер требует ключ доступа. Открой «Профиль» → «Ключ доступа» и впиши курьерский ключ, который выдал администратор.'); if(errO)return; }
+  else if(errO){ showErr('Не получается загрузить заказы ('+errO+'). Проверь интернет — список обновится сам.'); return; }
+  else if(errC){ showErr('Заказы получены, но список назначений недоступен ('+errC+').'); }
   else showErr('');
 
   /* назначения курьера из /kv накладываем поверх данных сервера */
