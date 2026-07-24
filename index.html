@@ -240,11 +240,12 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
 <div class="gate" id="gate">
   <img src="icon-512.png" alt="">
   <h2>YAYA · КУРЬЕР</h2>
-  <p>Выбери своё имя, чтобы выйти на смену</p>
+  <p>Введи имя и ключ доступа, чтобы выйти на смену</p>
   <select id="pickName"><option value="">Загружаю список…</option></select>
   <input id="typeName" placeholder="…или впиши имя вручную">
-  <input id="gateKey" type="password" placeholder="Ключ доступа (если сервер просит)">
-  <button onclick="enter()">Продолжить</button>
+  <input id="gateKey" type="password" placeholder="Ключ доступа" autocomplete="off">
+  <div id="gateErr" style="display:none;margin:2px 0 0;padding:9px 11px;border-radius:10px;background:rgba(240,69,58,.14);border:1px solid rgba(240,69,58,.4);color:#F0453A;font-size:12.5px;font-weight:700;line-height:1.4"></div>
+  <button id="gateBtn" onclick="enter()">Войти</button>
 </div>
 <div class="toast" id="toast"></div>
 <div class="sheet" id="contactSheet" onclick="if(event.target===this)closeContact()">
@@ -305,13 +306,41 @@ async function fillNames(){
   let list=[]; try{const v=await get(LIST_KEY); if(Array.isArray(v))list=v;}catch(e){}
   document.getElementById('pickName').innerHTML='<option value="">— выбери имя —</option>'+list.map(n=>`<option>${n}</option>`).join('');
 }
-function enter(){
-  const gk=document.getElementById('gateKey'); if(gk&&gk.value.trim()) setKey(gk.value);
-  const n=(document.getElementById('typeName').value.trim())||document.getElementById('pickName').value;
-  if(!n){toast('Выбери или впиши имя');return;}
-  ME=n; localStorage.setItem('yaya_courier_me',ME); openApp();
+function gateErr(msg){
+  const b=document.getElementById('gateErr');
+  if(!b)return; if(msg){b.textContent=msg;b.style.display='';}else b.style.display='none';
 }
-function logout(){ setOnline(false); localStorage.removeItem('yaya_courier_me'); location.reload(); }
+/* Проверка ключа на сервере. Возвращает 'admin' | 'courier' | false. */
+async function verifyKey(k){
+  try{
+    const r=await fetch(API+'/auth-check',{cache:'no-store',headers:k?{'X-Admin-Token':k}:{}});
+    if(!r.ok)return false;
+    const j=await r.json();
+    if(j.auth===false) return 'open';        // сервер вообще без ключей — пускаем
+    return j.ok ? (j.role||'admin') : false;
+  }catch(e){ return 'neterr'; }
+}
+async function enter(){
+  const n=(document.getElementById('typeName').value.trim())||document.getElementById('pickName').value;
+  if(!n){ gateErr('Выбери имя из списка или впиши своё.'); return; }
+  const gk=document.getElementById('gateKey');
+  const k=(gk&&gk.value.trim())||'';
+  if(!k){ gateErr('Введи ключ доступа — его выдаёт администратор.'); return; }
+
+  const btn=document.getElementById('gateBtn');
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Проверяю…'; gateErr('');
+  const role=await verifyKey(k);
+  btn.disabled=false; btn.textContent=old;
+
+  if(role==='neterr'){ gateErr('Нет связи с сервером. Проверь интернет и попробуй ещё раз.'); return; }
+  if(role===false){ gateErr('Неверный ключ доступа. Уточни ключ у администратора.'); return; }
+  // 'courier', 'admin' или 'open' — ключ принят
+  setKey(k);
+  ME=n;
+  localStorage.setItem('yaya_courier_me',ME);
+  openApp();
+}
+function logout(){ setOnline(false); localStorage.removeItem('yaya_courier_me'); setKey(''); location.reload(); }
 function saveKey(){
   const el=document.getElementById('keyInput');
   setKey(el.value); el.value='';
@@ -627,8 +656,30 @@ async function drawRoutes(force){
 }
 
 fillNames();
-const saved=localStorage.getItem('yaya_courier_me');
-if(saved){ME=saved;openApp();}
+/* Автовход: пускаем только если и имя, и сохранённый ключ ещё валидны.
+   Иначе — экран входа. Так приложение больше не открывается «по имени»
+   без действующего ключа. */
+(async function(){
+  const saved=localStorage.getItem('yaya_courier_me');
+  if(!saved) return;                    // не входил ещё — обычный экран входа
+  const role=await verifyKey(KEY);
+  if(role==='neterr'){
+    // Нет сети: не выкидываем, но и в приложение не пускаем вслепую —
+    // ключ уже проверялся при прошлом входе, доверяем ему до восстановления связи.
+    if(KEY){ ME=saved; openApp(); }
+    else showGateWith(saved);
+    return;
+  }
+  if(role===false || (!KEY && role!=='open')){ showGateWith(saved); return; }
+  ME=saved; openApp();
+})();
+function showGateWith(name){
+  // Возвращаем на экран входа, подставив имя, но требуя ключ заново.
+  const t=document.getElementById('typeName'); if(t&&name)t.value=name;
+  document.getElementById('gate').style.display='';
+  document.getElementById('app').style.display='none';
+  gateErr('Введи ключ доступа, чтобы продолжить.');
+}
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
 </script>
 </body>
