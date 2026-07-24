@@ -259,7 +259,7 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
 <script>
 const API='https://yaya-db-production.up.railway.app';
 const POS_KEY='yaya_courier_pos', COUR_KEY='yaya_order_couriers', LIST_KEY='yaya_couriers';
-const REST={lat:51.7294,lng:75.3220,addr:'ул. Абая, 49/5 · Экибастуз',name:'Ресторан YaYa Chicken'};
+const REST={lat:51.726458,lng:75.318556,addr:'ул. Абая, 49/5 · Экибастуз',name:'Ресторан YaYa Chicken'};  /* координаты совпадают с витриной */
 const SEND_EVERY=15000;
 const PREP_MIN=25;   // ориентировочное время приготовления, мин
 
@@ -362,7 +362,11 @@ async function sendPos(){
   if(!online||!lastPos)return;
   if(onlineSince){addActive(Date.now()-onlineSince);onlineSince=Date.now();renderStats();}
   let pos={}; try{const v=await get(POS_KEY);if(v&&typeof v==='object')pos=v;}catch(e){}
-  pos[ME]={lat:lastPos.lat,lng:lastPos.lng,ts:lastPos.ts}; put(POS_KEY,pos);
+  // Вместе с координатами кладём абсолютную ссылку на аватар курьера,
+  // чтобы витрина показывала то же фото, что и приложение курьера,
+  // не таская сам файл по репозиториям.
+  let avatarUrl=''; try{ avatarUrl=new URL('avatar.png',location.href).href; }catch(e){}
+  pos[ME]={lat:lastPos.lat,lng:lastPos.lng,ts:lastPos.ts,avatar:avatarUrl,name:ME}; put(POS_KEY,pos);
 }
 async function removePos(){ try{let v=await get(POS_KEY);if(v&&typeof v==='object'){delete v[ME];await put(POS_KEY,v);}}catch(e){} }
 
