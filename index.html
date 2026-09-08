@@ -343,7 +343,7 @@ function openApp(){
   document.getElementById('app').style.display='';
   document.getElementById('hiName').textContent='Привет, '+ME+'!';
   document.getElementById('pfName').textContent=ME;
-  registerMe(); loadOrders();
+  registerMe(); loadOrders(); subscribePush();
   if(pollTimer)clearInterval(pollTimer); pollTimer=setInterval(loadOrders,7000);
   if(!openApp.bound){ openApp.bound=true;
     document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&ME)loadOrders(); });
@@ -659,6 +659,31 @@ fillNames();
   document.getElementById('gate').style.display='';
   document.getElementById('app').style.display='none';
 })();
+/* Push-подписка курьера (role:'courier', name=ME). Запрашивает разрешение при входе. */
+function b64u(u){u=u.replace(/-/g,'+').replace(/_/g,'/');while(u.length%4)u+='=';var bin=atob(u),arr=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return arr;}
+function subscribePush(){
+  if(!('serviceWorker' in navigator)||!('Notification' in window)) return;
+  if(!ME||!KEY) return;
+  function sub(reg){
+    fetch(API+'/push/public-key',{cache:'no-store'}).then(r=>r.json())
+      .then(d=>{if(!(d&&d.ok&&d.key))return; return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(d.key)});})
+      .then(s=>{if(!s)return; return fetch(API+'/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Token':KEY},body:JSON.stringify({role:'courier',name:ME,sub:s.toJSON()})})
+        .then(r=>{if(r.ok){try{localStorage.setItem('yaya_courier_sub',ME);}catch(e){}}});})
+      .catch(function(){});
+  }
+  navigator.serviceWorker.ready.then(reg=>{
+    if(Notification.permission==='denied'){ try{toast&&toast('Уведомления отключены в браузере — включите их в настройках сайта');}catch(e){} return; }
+    reg.pushManager.getSubscription().then(s=>{
+      let marked=''; try{ marked=localStorage.getItem('yaya_courier_sub')||''; }catch(e){}
+      if(s){
+        if(marked===ME) return;                       // тот же курьер на этом телефоне — не пересоздаём
+        return s.unsubscribe().catch(function(){}).then(()=>sub(reg));   // другое имя — перевесить подписку
+      }
+      if(Notification.permission==='granted') return sub(reg);
+      return Notification.requestPermission().then(p=>{ if(p==='granted') return sub(reg); });
+    }).catch(function(){});
+  }).catch(function(){});
+}
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
 </script>
 </body>
