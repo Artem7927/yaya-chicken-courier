@@ -446,10 +446,27 @@ function printReceiptFromOrder(o){
   if(!st){st=document.createElement('style');st.id='rcptPrintStyle';st.innerHTML='@media print{body *{visibility:hidden!important}#rcptPrintArea,#rcptPrintArea *{visibility:visible!important}#rcptPrintArea{position:fixed;left:0;top:0;right:0;width:100%;background:#fff}}';document.head.appendChild(st);}
   try{window.print();}catch(e){toast('Печать недоступна');}
 }
+let _rcptMenu=null;
+async function loadRcptMenu(){
+  if(_rcptMenu) return _rcptMenu;
+  try{ _rcptMenu=await get('yaya_menu'); }
+  catch(e){ _rcptMenu={}; }
+  return _rcptMenu;
+}
+function mixRcptImgs(items){
+  if(!items||!Array.isArray(items)||!items.length)return;
+  const raw=_rcptMenu||{},cats=Array.isArray(raw.categories)?raw.categories:(Array.isArray(raw)?raw:[]);
+  const byId={};
+  cats.forEach(c=>((c&&c.items)||[]).forEach(it=>{if(it&&it.id!=null)byId[String(it.id)]=it.img||'';}));
+  if(!Object.keys(byId).length)return;
+  items.forEach(i=>{if(i&&i.id!=null&&!i.img)i.img=byId[String(i.id)]||'';});
+}
 let _rcptCur=null;
-function openRcpt(id){
-  const o=ORDERS.find(x=>x.id===id); if(!o){toast('Заказ не найден');return;}
+async function openRcpt(id){
+  const o=ORDERS.find(x=>String(x.id)===String(id)); if(!o){toast('Заказ не найден');return;}
   _rcptCur=o;
+  await loadRcptMenu();
+  mixRcptImgs(o.items);
   document.getElementById('rcptBody').innerHTML=renderReceiptFromOrder(o);
   document.getElementById('rcptSheet').classList.add('show');
 }
