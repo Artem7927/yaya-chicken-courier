@@ -683,10 +683,10 @@ function payBlock(o){
   </div>`;
 }
 function setPayMeth(id,btn,m){const s=_paySel[String(id)]||(_paySel[String(id)]={});s.method=m;btn.parentNode.querySelectorAll('.pseg').forEach(b=>b.classList.toggle('on',b===btn));}
-function payAmt(id,inp){const s=_paySel[String(id)]||(_paySel[String(id)]={});s.amount=Math.max(0,Number(inp.value)||0);const o=ORDERS.find(x=>x.id===id);const wr=document.querySelector('[data-reason-wrap="'+id+'"]');if(wr)wr.style.display=(s.amount<(Number(o&&o.total)||0))?'':'none';}
+function payAmt(id,inp){const s=_paySel[String(id)]||(_paySel[String(id)]={});s.amount=Math.max(0,Number(inp.value)||0);const o=ORDERS.find(x=>String(x.id)===String(id));const wr=document.querySelector('[data-reason-wrap="'+id+'"]');if(wr)wr.style.display=(s.amount<(Number(o&&o.total)||0))?'':'none';}
 function payToggleNote(id){const sel=document.querySelector('[data-reason="'+id+'"]');const note=document.querySelector('[data-note="'+id+'"]');if(note)note.style.display=(sel&&sel.value==='other')?'':'none';}
 async function savePay(id){
-  const o=ORDERS.find(x=>x.id===id); if(!o){toast('Заказ не найден');return;}
+  const o=ORDERS.find(x=>String(x.id)===String(id)); if(!o){toast('Заказ не найден');return;}
   const s=_paySel[String(id)]||{};
   const method=_PAY_METH[s.method]?s.method:'cash';
   const amount=Math.round(s.amount)||0;
@@ -706,7 +706,7 @@ async function savePay(id){
   cur.pay={method:method,amount:amount,reason:reason,reason_note:reason_note,ts:Date.now(),by:ME};
   cour[id]=cur;
   const ok=await put(COUR_KEY,cour);
-  if(ok){const oo=ORDERS.find(x=>x.id===id);if(oo)oo.payFact=cur.pay;renderList();toast('Оплата принята ✓');}
+  if(ok){const oo=ORDERS.find(x=>String(x.id)===String(id));if(oo)oo.payFact=cur.pay;renderList();toast('Оплата принята ✓');}
   else toast('Нет связи — попробуй ещё раз');
 }
 function histCard(o){
