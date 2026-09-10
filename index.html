@@ -153,6 +153,22 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
 .sheet .cancelb{background:var(--panel2);border:1px solid var(--border2);color:var(--text2);margin-bottom:0}
 .sheet svg{width:20px;height:20px}
 
+.paybox{background:var(--panel2);border:1px solid var(--border2);border-radius:14px;padding:12px;margin-top:13px}
+.paybox.paid{background:rgba(53,199,126,.08);border-color:rgba(53,199,126,.45)}
+.pay-t{font-weight:900;font-size:13.5px;margin-bottom:9px;color:var(--text)}
+.pay-t.ok{color:var(--green)}
+.psegs{display:flex;gap:8px}
+.pseg{flex:1;background:var(--panel);border:1px solid var(--border2);color:var(--text2);border-radius:11px;padding:10px 6px;font-weight:800;font-size:12.5px;text-align:center;cursor:pointer;transition:.15s}
+.pseg.on{background:rgba(244,180,0,.16);border-color:var(--gold);color:var(--gold)}
+.pseg.confirm{flex:none;width:100%;background:var(--gold);color:#161100;border:none;padding:13px 16px;border-radius:13px;font-weight:900;font-size:14.5px;margin-top:11px}
+.pamt{display:flex;align-items:center;gap:8px;margin-top:10px}
+.pamt input{flex:1;background:var(--panel);border:1px solid var(--border2);color:var(--text);border-radius:11px;padding:11px 12px;font-size:15px;font-weight:800;min-width:0}
+.pamt span{color:var(--text2);font-weight:900}
+.pay-reason{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:10px;margin-top:10px}
+.pay-reason select,.pay-reason input{width:100%;background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:800}
+.pay-reason select{margin-bottom:8px}
+.pay-short{font-size:12px;color:var(--red);font-weight:800;margin-top:6px}
+
 .gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:26px;gap:14px}
 .gate img{width:120px;height:120px;border-radius:28px;object-fit:cover;margin-bottom:4px}
 .gate h2{font-family:'Bebas Neue';font-size:30px;letter-spacing:.6px}
@@ -254,6 +270,15 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
     <div id="rcptBody" style="margin-bottom:14px"></div>
     <button class="callb" onclick="printCurRcpt()">Печать / Сохранить PDF</button>
     <button class="cancelb" onclick="closeRcpt()">Закрыть</button>
+  </div>
+</div>
+<div class="sheet" id="qrSheet" onclick="if(event.target===this)closeQr()">
+  <div class="box" style="text-align:center">
+    <h3>Kaspi QR · YaYa</h3>
+    <img id="qrImg" src="qr-kaspi.png" alt="Kaspi QR" style="width:min(86vw,420px);height:auto;border-radius:16px;background:#fff;display:block;margin:0 auto 12px" onerror="this.style.display='none';document.getElementById('qrFallback').style.display='block'">
+    <div id="qrFallback" style="display:none;padding:34px 16px;border:1px dashed var(--border2);border-radius:14px;color:var(--text2);font-weight:800;margin-bottom:12px">QR не загружен — обратитесь к администратору</div>
+    <div style="font-size:13px;color:var(--text2);font-weight:800;margin-bottom:12px">Поверните экран к клиенту для оплаты</div>
+    <button class="cancelb" onclick="closeQr()">Закрыть</button>
   </div>
 </div>
 
@@ -505,10 +530,11 @@ async function loadOrders(){
   /* назначения курьера из /kv накладываем поверх данных сервера */
   orders.forEach(o=>{ const c=cour[o.id]; if(!c)return;
     if(c.courier!==undefined) o.courier=c.courier;
-    if(c.delivery_status!==undefined) o.delivery_status=c.delivery_status; });
+    if(c.delivery_status!==undefined) o.delivery_status=c.delivery_status;
+    if(c.pay) o.payFact=c.pay; });
 
   ORDERS=orders.filter(o=>norm(o.courier)&&norm(o.courier)===norm(ME))
-    .map(o=>({...parse(o),dst:o.delivery_status||'assigned',kst:o.status||'new'}));
+    .map(o=>({...parse(o),dst:o.delivery_status||'assigned',kst:o.status||'new',payFact:o.payFact||null}));
 
   /* заказ, только что назначенный на меня — сразу подсвечиваем, даже если он ещё готовится */
   const act=ORDERS.filter(o=>o.kst!=='cancel'&&o.dst!=='delivered'&&o.dst!=='on_way');
@@ -608,9 +634,11 @@ function workCard(o){
     <div class="h"><span class="no">#${o.num}</span><span class="badge b-work">В работе</span>
       <div class="rt"><b>Доставка</b></div></div>
     ${routeBlock(o)}
+    ${payBlock(o)}
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:13px">
       ${contact}
       <button class="callcli" style="width:100%" onclick="openRcpt(${o.id})">Квитанция</button>
+      <button class="callcli" style="width:100%" onclick="openQr()">Показать QR клиенту <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM17 17h3v3h-3z"/></svg></button>
       <button class="deliver" style="width:100%" onclick="setStatus(${o.id},'delivered')">Заказ доставлен <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></button>
     </div></div>`;
 }
@@ -622,6 +650,65 @@ function contactClient(phone){
   document.getElementById('contactSheet').classList.add('show');
 }
 function closeContact(){ document.getElementById('contactSheet').classList.remove('show'); }
+function openQr(){ document.getElementById('qrSheet').classList.add('show'); }
+function closeQr(){ document.getElementById('qrSheet').classList.remove('show'); }
+
+/* ── Приём оплаты курьером: пишем в KV аддитивно, delivery_status не трогаем ── */
+const _PAY_METH={'cash':'Наличные','kaspi-qr':'Kaspi QR','remote':'Удалённо'};
+const _PAY_REAS={'undelivered':'Не доложили','refused':'Клиент отказался','missing':'Нет в наличии','defect':'Брак','other':'Другое'};
+let _paySel={};
+function _payDefMeth(p){const s=String(p||'').toLowerCase();return s.indexOf('kaspi-qr')>=0?'kaspi-qr':s.indexOf('cash')>=0?'cash':'remote';}
+function payBlock(o){
+  if(o.payFact){
+    const p=o.payFact,m=_PAY_METH[p.method]||p.method;
+    const sh=(p.reason||p.reason_note)
+      ?`<div class="pay-short">недовоз: ${_rcpEsc(p.reason_note||(_PAY_REAS[p.reason]||p.reason))}</div>`:'';
+    return `<div class="paybox paid"><div class="pay-t ok">✓ Оплачено ${m} · ${_rcpMoney(p.amount)}</div>${sh}</div>`;
+  }
+  const id=String(o.id);
+  if(!_paySel[id]) _paySel[id]={method:_payDefMeth(o.pay),amount:(Number(o.total)||0)};
+  const s=_paySel[id];
+  return `<div class="paybox">
+    <div class="pay-t">Принять оплату</div>
+    <div class="psegs">${['cash','kaspi-qr','remote'].map(v=>`<button type="button" class="pseg ${v===s.method?'on':''}" onclick="setPayMeth(${o.id},this,'${v}')">${_PAY_METH[v]}</button>`).join('')}</div>
+    <div class="pamt"><input type="number" inputmode="numeric" min="0" value="${s.amount}" data-amt="${id}" oninput="payAmt(${o.id},this)"><span>₸</span></div>
+    <div class="pay-reason" data-reason-wrap="${id}" style="${s.amount<(Number(o.total)||0)?'':'display:none'}">
+      <select data-reason="${id}" onchange="payToggleNote(${o.id})">
+        <option value="">— причина недовоза —</option>
+        ${Object.keys(_PAY_REAS).map(k=>`<option value="${k}">${_PAY_REAS[k]}</option>`).join('')}
+      </select>
+      <input type="text" placeholder="Уточните причину" data-note="${id}" style="display:none">
+    </div>
+    <button type="button" class="pseg confirm" onclick="savePay(${o.id})">✓ Оплата принята</button>
+  </div>`;
+}
+function setPayMeth(id,btn,m){const s=_paySel[String(id)]||(_paySel[String(id)]={});s.method=m;btn.parentNode.querySelectorAll('.pseg').forEach(b=>b.classList.toggle('on',b===btn));}
+function payAmt(id,inp){const s=_paySel[String(id)]||(_paySel[String(id)]={});s.amount=Math.max(0,Number(inp.value)||0);const o=ORDERS.find(x=>x.id===id);const wr=document.querySelector('[data-reason-wrap="'+id+'"]');if(wr)wr.style.display=(s.amount<(Number(o&&o.total)||0))?'':'none';}
+function payToggleNote(id){const sel=document.querySelector('[data-reason="'+id+'"]');const note=document.querySelector('[data-note="'+id+'"]');if(note)note.style.display=(sel&&sel.value==='other')?'':'none';}
+async function savePay(id){
+  const o=ORDERS.find(x=>x.id===id); if(!o){toast('Заказ не найден');return;}
+  const s=_paySel[String(id)]||{};
+  const method=_PAY_METH[s.method]?s.method:'cash';
+  const amount=Math.round(s.amount)||0;
+  if(amount<=0){toast('Укажите сумму оплаты');return;}
+  let reason=null,reason_note='';
+  if(amount<Number(o.total)||0){
+    const sel=document.querySelector('[data-reason="'+id+'"]');
+    reason=sel?sel.value:'';
+    if(!reason){toast('Укажите причину недовоза');return;}
+    if(reason==='other'){
+      const note=document.querySelector('[data-note="'+id+'"]');reason_note=(note&&note.value.trim())||'';
+      if(!reason_note){toast('Опишите причину (Другое)');return;}
+    }
+  }
+  let cour={}; try{const v=await get(COUR_KEY);if(v&&typeof v==='object')cour=v;}catch(e){}
+  const cur=(cour[id]&&typeof cour[id]==='object')?cour[id]:{};
+  cur.pay={method:method,amount:amount,reason:reason,reason_note:reason_note,ts:Date.now(),by:ME};
+  cour[id]=cur;
+  const ok=await put(COUR_KEY,cour);
+  if(ok){const oo=ORDERS.find(x=>x.id===id);if(oo)oo.payFact=cur.pay;renderList();toast('Оплата принята ✓');}
+  else toast('Нет связи — попробуй ещё раз');
+}
 function histCard(o){
   return `<div class="oc" style="border-left:4px solid var(--muted)">
     <div class="h"><span class="no">#${o.num}</span><span class="badge" style="background:rgba(158,152,139,.16);color:var(--text2)">Доставлен</span>
