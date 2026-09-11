@@ -60,6 +60,16 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
 .tab.active{color:var(--text)}
 .tab.active::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2.5px;background:var(--gold);border-radius:2px}
 
+/* Фильтр периода День/Месяц/Год (портирован из manager-mobile) */
+.ptabs{display:flex;background:var(--panel2);border:1px solid var(--border);border-radius:11px;padding:3px;margin-bottom:10px}
+.ptab{flex:1;border:none;background:none;color:var(--muted);font-size:12px;font-weight:700;padding:8px 4px;border-radius:8px;cursor:pointer;font-family:inherit;transition:.15s}
+.ptab.on{background:var(--gold);color:#161100}
+.arow{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.arow .ab{width:36px;height:36px;border-radius:10px;border:none;background:rgba(245,130,32,.14);color:var(--orange);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit}
+.arow .ab:active{transform:scale(.95)}
+.arow .ab[disabled]{opacity:.25;pointer-events:none}
+.arow .ac{font-size:15px;font-weight:700;letter-spacing:-.2px}
+
 .list{padding:12px 16px 0}
 .oc{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:15px;margin-bottom:13px;position:relative;overflow:hidden}
 .oc.new{border-left:4px solid var(--gold)}
@@ -206,6 +216,7 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
       <button class="tab" data-t="work" onclick="setTab('work')">В работе <span class="cnt" id="cWork" style="background:var(--panel2);color:var(--text2)">0</span></button>
       <button class="tab" data-t="hist" onclick="setTab('hist')">История</button>
     </div>
+    <div id="dfWidget" style="display:none;margin:0 16px 10px"></div>
     <div id="syncErr" style="display:none;margin:0 16px 10px;padding:10px 12px;border-radius:12px;background:rgba(240,69,58,.12);border:1px solid rgba(240,69,58,.35);color:#F0453A;font-size:12.5px;font-weight:700;line-height:1.4"></div>
     <div class="list" id="list"><div class="empty">Загружаю…</div></div>
   </section>
@@ -580,12 +591,69 @@ function setTab(t){curTab=t;document.querySelectorAll('.tab').forEach(x=>x.class
 function mapLink(addr){return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination='+encodeURIComponent((addr||'')+', Экибастуз');}
 function readyAt(o){return (Number(o.ts)||Date.now())+PREP_MIN*60000;}
 
+/* ── Фильтр периода: День/Месяц/Год + перелистывание (портирован из manager-mobile, _ord*→_df*) ── */
+let _dfPeriod='day',_dfCursor=(()=>{const t=new Date();return{y:t.getFullYear(),m:t.getMonth(),d:t.getDate()}})();
+function _dfToday(){return new Date();}
+function _dfIsFuture(){
+  const t=_dfToday();
+  if(_dfPeriod==='day')return _dfCursor.y===t.getFullYear()&&_dfCursor.m===t.getMonth()&&_dfCursor.d===t.getDate();
+  if(_dfPeriod==='month')return _dfCursor.y===t.getFullYear()&&_dfCursor.m===t.getMonth();
+  return _dfCursor.y===t.getFullYear();
+}
+function _dfSetMode(m){
+  _dfPeriod=m;const t=_dfToday();
+  if(m==='day')_dfCursor={y:t.getFullYear(),m:t.getMonth(),d:t.getDate()};
+  else if(m==='month')_dfCursor={y:t.getFullYear(),m:t.getMonth()};
+  else _dfCursor={y:t.getFullYear()};
+  _dfRender();
+}
+function _dfStep(dir){
+  const c=_dfCursor,t=_dfToday();
+  if(_dfPeriod==='day'){
+    const d=new Date(c.y,c.m,c.d+dir);
+    if(dir>0&&d>t)return;
+    _dfCursor={y:d.getFullYear(),m:d.getMonth(),d:d.getDate()};
+  }else if(_dfPeriod==='month'){
+    if(dir>0&&c.y===t.getFullYear()&&c.m===t.getMonth())return;
+    let nm=c.m+dir,ny=c.y;
+    if(nm<0){nm=11;ny--;}else if(nm>11){nm=0;ny++;}
+    _dfCursor={y:ny,m:nm};
+  }else{
+    if(dir>0&&c.y===t.getFullYear())return;
+    _dfCursor={y:c.y+dir};
+  }
+  _dfRender();
+}
+function _dfCenter(){
+  if(_dfPeriod==='day')return _dfCursor.d+' '+(['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'][_dfCursor.m])+' '+_dfCursor.y;
+  if(_dfPeriod==='month')return ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'][_dfCursor.m]+' '+_dfCursor.y;
+  return String(_dfCursor.y);
+}
+function _dfRange(){
+  const c=_dfCursor;let s,t;
+  if(_dfPeriod==='day'){s=new Date(c.y,c.m,c.d,0,0,0,0);t=new Date(c.y,c.m,c.d+1,0,0,0,0);}
+  else if(_dfPeriod==='month'){s=new Date(c.y,c.m,1);t=new Date(c.y,c.m+1,1);}
+  else {s=new Date(c.y,0,1);t=new Date(c.y+1,0,1);}
+  return [s.getTime(),t.getTime()];
+}
+function _dfTs(o){return Number(o&&o.ts!=null?o.ts:0)||0;}
+function _dfWidgetHtml(){
+  return `<div class="ptabs"><button class="ptab ${_dfPeriod==='day'?'on':''}" onclick="_dfSetMode('day')">День</button><button class="ptab ${_dfPeriod==='month'?'on':''}" onclick="_dfSetMode('month')">Месяц</button><button class="ptab ${_dfPeriod==='year'?'on':''}" onclick="_dfSetMode('year')">Год</button></div><div class="arow"><button class="ab" onclick="_dfStep(-1)">◄</button><span class="ac">${_dfCenter()}</span><button class="ab" ${_dfIsFuture()?'disabled':''} onclick="_dfStep(1)">►</button></div>`;
+}
+let _dfRender=renderList;
+
 function renderList(){
   const box=document.getElementById('list');
+  const wg=document.getElementById('dfWidget');
+  if(wg){ wg.style.display=curTab==='hist'?'':'none'; if(curTab==='hist')wg.innerHTML=_dfWidgetHtml(); }
   let items=[];
   if(curTab==='new')  items=ORDERS.filter(o=>o.kst!=='cancel'&&o.dst!=='on_way'&&o.dst!=='delivered').sort((a,b)=>a.ts-b.ts);
   if(curTab==='work') items=ORDERS.filter(o=>o.dst==='on_way').sort((a,b)=>b.ts-a.ts);
-  if(curTab==='hist') items=ORDERS.filter(o=>o.dst==='delivered').sort((a,b)=>b.ts-a.ts);
+  if(curTab==='hist'){
+    items=ORDERS.filter(o=>o.dst==='delivered').sort((a,b)=>b.ts-a.ts);
+    const [rs,re]=_dfRange();
+    items=items.filter(o=>{const ts=_dfTs(o);return ts>=rs&&ts<re;});
+  }
   if(!items.length){
     const msg=curTab==='new'?'Новых заказов нет':curTab==='work'?'Нет заказов в работе':'История пуста';
     box.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg>${msg}</div>`;
@@ -726,8 +794,12 @@ async function setStatus(id,st){
   const o=ORDERS.find(x=>x.id==id); if(o)o.dst=st;
   renderStats(); renderList();
   const ok=await put(COUR_KEY,cour);
+  if(ok&&st==='delivered')setFulfilled(id);
   toast(ok?(st==='on_way'?'Заказ принят':st==='delivered'?'Заказ доставлен ✓':'Готово'):'Нет связи — попробуй ещё раз');
   loadOrders();
+}
+function setFulfilled(id){
+  fetchT(API+'/orders/'+id+'/fulfill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'courier'})}).catch(()=>{});
 }
 
 function renderIncome(){
