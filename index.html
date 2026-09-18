@@ -144,9 +144,10 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
 .bn{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:40;
   background:rgba(16,14,10,.98);backdrop-filter:blur(14px);border-top:1px solid var(--border);
   display:flex;justify-content:space-around;padding:9px 4px calc(9px + env(safe-area-inset-bottom))}
-.bn a{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-size:10px;font-weight:800;padding:4px 8px}
+.bn a{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-size:10px;font-weight:800;padding:4px 8px}
 .bn a svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .bn a.active{color:var(--gold)}
+.bn a .nb{position:absolute;top:-1px;right:-2px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--gold);color:#161100;font-size:10px;font-weight:900;align-items:center;justify-content:center;display:none}
 
 .err{background:rgba(240,69,58,.12);border:1px solid rgba(240,69,58,.4);color:var(--red);border-radius:12px;padding:11px 14px;font-size:13px;font-weight:800;margin:0 16px 12px;display:none}
 .err.show{display:block}
@@ -334,7 +335,7 @@ const NAV=[['orders','Заказы','<rect x="5" y="3" width="14" height="18" rx
   ['msg','Сообщения','<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>'],
   ['profile','Профиль','<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>']];
 document.getElementById('bn').innerHTML=NAV.map(([id,l,ic])=>
-  `<a href="#" data-id="${id}" onclick="go('${id}');return false"><svg viewBox="0 0 24 24">${ic}</svg>${l}</a>`).join('');
+  `<a href="#" data-id="${id}" onclick="go('${id}');return false"><svg viewBox="0 0 24 24">${ic}</svg>${id==='orders'?'<span class="nb" id="nb-orders"></span>':''}${l}</a>`).join('');
 function go(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('s-'+id).classList.add('active');
@@ -552,6 +553,8 @@ async function loadOrders(){
   const act=ORDERS.filter(o=>o.kst!=='cancel'&&o.dst!=='delivered'&&o.dst!=='on_way');
   if(!firstLoad) act.forEach(o=>{ if(!knownIds.has(o.id)){ toast('Заказ #'+o.num+' назначен — маршрут уже готов'); ping(); } });
   knownIds=new Set(act.map(o=>o.id)); firstLoad=false;
+  const _nb=document.getElementById('nb-orders'); const _n=ORDERS.filter(o=>o.kst!=='cancel'&&o.dst!=='delivered').length;
+  if(_nb){_nb.textContent=String(_n);_nb.style.display=_n>0?'flex':'none';}
 
   renderStats(); renderList();
   prefetchGeo();               // адреса греем заранее, чтобы карта открывалась мгновенно
