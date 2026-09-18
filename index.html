@@ -196,6 +196,7 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer;b
       <div class="hi"><h1 id="hiName">Привет!</h1>
         <div class="st off" id="hiStatus"><i></i><span>Не на линии</span></div></div>
       <div class="toggle"><div class="sw" id="onSw" onclick="toggleOnline()"></div><span>Онлайн</span></div>
+      <button id="yn-toggle" title="Звук уведомлений" onclick="_ynSetSound(!_ynSoundOn())" style="background:none;border:none;font-size:20px;cursor:pointer;line-height:1;">🔔</button>
     </div>
     <div class="err" id="geoErr"></div>
     <div class="today">
@@ -556,7 +557,13 @@ async function loadOrders(){
   prefetchGeo();               // адреса греем заранее, чтобы карта открывалась мгновенно
   if(leaflet) drawRoutes();    // маршрут перестраиваем, даже если экран «Карта» сейчас закрыт
 }
+/* --- YaYa notify (триммер звука, детект и бип уже есть) --- */
+function _ynSoundOn(){try{return localStorage.getItem('yaya_notify_sound')!=='0';}catch(e){return true;}}
+function _ynSetSound(o){try{localStorage.setItem('yaya_notify_sound',o?'1':'0');}catch(e){}_ynSyncToggle();}
+function _ynSyncToggle(){var b=document.getElementById('yn-toggle');if(b)b.textContent=_ynSoundOn()?'🔔':'🔕';}
+_ynSyncToggle();
 function ping(){ try{
+  if(!_ynSoundOn())return;
   const C=window.AudioContext||window.webkitAudioContext; if(!C)return;
   const c=new C(),o=c.createOscillator(),g=c.createGain();
   o.type='sine'; o.frequency.value=880; g.gain.value=.14;
